@@ -1,6 +1,6 @@
 # Deep Learning in the Trenches: A Pragmatic Field Guide
 
-Grab a coffee. Let’s have an honest conversation about deep learning. 
+Grab a coffee. Let’s have an honest conversation about deep learning.
 
 If you spend any time on social media or reading corporate blog posts, you get the impression that deep learning is either magic or an incomprehensible wall of tensor calculus. People talk about trillion-parameter models, autonomous agents, and emergent reasoning like it all happens overnight by hitting `model.fit()`.
 
@@ -14,7 +14,7 @@ This guide is the notebook I wish someone had handed me years ago. We will bypas
 
 Strip away the biological metaphors. Neural networks are not brains. Calling them "neurons" and "synapses" was great marketing in the 1950s, but it confuses people today.
 
-A neural network is a parameterized, differentiable function. You pass numbers in; it spits numbers out. In between, you have a massive stack of linear transformations (matrix multiplications) sandwiched between non-linear activation functions (like ReLU or GELU). 
+A neural network is a parameterized, differentiable function. You pass numbers in; it spits numbers out. In between, you have a massive stack of linear transformations (matrix multiplications) sandwiched between non-linear activation functions (like ReLU or GELU).
 
 ```
 y_pred = Layer3(Activation(Layer2(Activation(Layer1(x)))))
@@ -30,6 +30,8 @@ Training is just calculus and optimization:
 
 Repeat that loop a few hundred thousand times, and the network slowly molds itself into a function that maps your inputs to your desired targets. That is all of it. Everything else—residual connections, attention mechanisms, normalization layers—is just scaffolding designed to help gradients flow backward without vanishing into zero or exploding into `NaN`.
 
+![The End-to-End Deep Learning Lifecycle](assets/deep-learning-lifecycle.jpg)
+
 ---
 
 ## 2. The Uncomfortable Truth About Data
@@ -39,7 +41,7 @@ The beginner instinct is to spend 80% of your energy tweaking network architectu
 If your dataset is dirty, your model will faithfully learn that dirt. If your labels have a 10% error rate because three annotators disagreed on what "frustrated customer tone" means, no transformer in the world will save you.
 
 ### Label Quality and Annotator Drift
-Before touching a GPU, inspect your raw data with your own eyes. Sample 200 random rows. You will almost certainly find truncated text, flipped labels, scrambled unicode, or duplicated images. 
+Before touching a GPU, inspect your raw data with your own eyes. Sample 200 random rows. You will almost certainly find truncated text, flipped labels, scrambled unicode, or duplicated images.
 
 If humans cannot consistently agree on a label given the input, the network cannot learn it either. Establish clear annotation guidelines, run agreement scores (like Cohen's Kappa), and discard ambiguous edge cases early.
 
@@ -103,6 +105,8 @@ $$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)
 
 Every token looks at every other token simultaneously. GPUs can saturate all their cores at once. The trade-off is computational complexity: standard self-attention scales quadratically with sequence length ($O(N^2)$). Double the context length, and your attention compute quadruples.
 
+![Transformer Architecture and Multi-Head Attention Mechanism](assets/transformer-attention-architecture.jpg)
+
 Modern implementations tame this bottleneck:
 - FlashAttention reorganizes how attention is computed inside GPU SRAM, avoiding slow round-trips to high-bandwidth memory (HBM).
 - Grouped-Query Attention (GQA) reduces the memory footprint of the Key-Value cache during auto-regressive generation.
@@ -141,7 +145,7 @@ LR
 ```
 
 ### Numerical Precision: Say Goodbye to FP32
-Training in full precision (float32) is a waste of silicon. 
+Training in full precision (float32) is a waste of silicon.
 
 Use Mixed Precision (BF16 or FP16).
 - BF16 (Bfloat16) keeps the same 8-bit dynamic range as float32 but drops precision to 7 bits. It almost never suffers from underflow or overflow, meaning you rarely need loss scaling. If your GPU supports it (NVIDIA Ampere generation or newer: RTX 30xx/40xx, A100, H100), always pick BF16.
@@ -158,7 +162,7 @@ When your network fails to train, you cannot step through with a standard debugg
 ### Step 1: Overfit a Single Batch
 Take 16 samples from your training set. Disable all data augmentation. Train your network exclusively on those 16 samples for 100 steps.
 
-Can your model reach 99% accuracy or drive the loss near zero? 
+Can your model reach 99% accuracy or drive the loss near zero?
 - If not: You have a bug in your forward pass, your loss calculation, your tensor shapes, or your gradient zeroing (`optimizer.zero_grad()`). Stop and fix this before running on the full dataset.
 - If yes: Your pipeline, backprop, and architecture work. Any failure on the full dataset stems from learning rates, capacity, data quality, or regularization.
 
@@ -197,21 +201,6 @@ $$W = W_0 + \frac{\alpha}{r} (B \cdot A)$$
 
 Where $A$ is $d \times r$ and $B$ is $r \times k$. The rank $r$ is tiny—typically between 8 and 64.
 
-```
-       Original W (Frozen)
-       +---------------+
-       |               |
-   x ->|   d x k       |---> (+) -> Output
-       |               |      ^
-       +---------------+      |
-                              |
-       Adapter A       Adapter B
-       +-------+       +------+
-   x ->| d x r |------>| r x k|
-       +-------+       +------+
-       (Trainable Low-Rank Matrices)
-```
-
 Instead of updating 7 billion parameters, you train 20 million. You can fine-tune a large model on a single consumer GPU (like an RTX 4090 or even an RTX 3090). Once training is complete, you can mathematically merge $B \cdot A$ back into $W_0$. Inference latency remains completely unchanged.
 
 ### QLoRA: Quantized LoRA
@@ -246,56 +235,94 @@ Use purpose-built inference engines:
 
 ---
 
-## 8. Essential Tools and Libraries
+## 8. Videos & Visual Walkthroughs Worth Your Time
 
-Here is the practical stack that teams actually rely on:
+When text feels too abstract, watch experienced practitioners step through code and math line-by-line:
 
-- **Core Math & Training**:
-  - `PyTorch`: The default industry standard for modeling, experimentation, and production codebases.
-  - `JAX`: Loved in research labs for functional programming, hardware-agnostic compilation (XLA), and auto-vectorization (`vmap`).
-  - `PyTorch Lightning` / `HuggingFace Accelerate`: Lightweight wrappers that strip boilerplate training loops without locking you into proprietary abstractions.
+- **[Andrej Karpathy — Neural Networks: Zero to Hero](https://www.youtube.com/playlist?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ)**  
+  The absolute gold standard. Karpathy builds micrograd (autograd engine), makemore (character-level language models), and a full GPT from scratch in pure Python and PyTorch. No magic libraries, just raw tensors and backward passes.
 
-- **Data & Tokenization**:
-  - `Polars` / `DuckDB`: Modern replacements for pandas when cleaning multi-gigabyte datasets fast.
-  - `HuggingFace Datasets`: Memory-mapped arrow tables that allow streaming datasets larger than your system RAM.
-  - `Tiktoken`: Ultra-fast BPE tokenization by OpenAI.
+- **[3Blue1Brown — Neural Networks & Transformers Series](https://www.youtube.com/playlist?list=PLZHQObOWTQDNU6R1_67000Dx_ZCJB-3pi)**  
+  Grant Sanderson provides the cleanest geometric intuition you will find on linear transformations, gradient descent down high-dimensional valleys, and multi-head attention.
 
-- **Experiment Tracking**:
-  - `Weights & Biases (wandb)`: The standard for tracking loss curves, hyperparameter sweeps, and artifact versioning.
-  - `MLflow`: Open-source, self-hostable experiment tracker and model registry.
+- **[StatQuest with Josh Starmer — Neural Networks](https://www.youtube.com/playlist?list=PLblh5JKOoLUIxGDQs4LFFD--41Vzf-ME1)**  
+  Zero pretension. Starmer breaks down backpropagation, cross-entropy loss, and transformers using clear step-by-step cartoon math.
 
-- **Acceleration & Quantization**:
-  - `BitsAndBytes`: Drop-in 8-bit and 4-bit optimizers and quantization layers.
-  - `PEFT`: Hugging Face library providing standardized implementations of LoRA, Prefix Tuning, and AdaLoRA.
-  - `FlashAttention-2`: Optimized attention kernels that save memory and dramatically accelerate training and inference.
+- **[Umar Jamil — AI Paper Implementations](https://www.youtube.com/@umarjamilai)**  
+  Line-by-line PyTorch walkthroughs of landmark papers: Attention Is All You Need, Llama, LoRA, and Stable Diffusion.
+
+- **[Fast.ai — Practical Deep Learning for Coders](https://course.fast.ai/)**  
+  Jeremy Howard's top-down, code-first course. You train a state-of-the-art vision classifier in lesson one, then gradually unpack how the machinery works under the hood.
 
 ---
 
-## 9. Seminal Papers Worth Reading
+## 9. Interactive Playgrounds & Visual Explainers
 
-Skip the flood of repetitive derivative preprints. These foundational papers teach principles that remain relevant across architecture shifts:
+Use these web tools to build an intuitive feel for training dynamics before writing code:
 
-1. **Deep Residual Learning for Image Recognition** (He et al., 2015)
+- **[TensorFlow Playground](https://playground.tensorflow.org/)**  
+  Tweak input features, add hidden layers, and change learning rates on a 2D toy dataset directly in your browser. You can watch the decision boundaries bend and twist in real time.
+
+- **[Polo Club CNN Explainer](https://poloclub.github.io/cnn-explainer/) & [Transformer Explainer](https://poloclub.github.io/transformer-explainer/)**  
+  Interactive 3D visualizers from Georgia Tech. You can click into individual convolutional kernels or trace self-attention probabilities token by token as a sentence is processed.
+
+- **[Jay Alammar’s Visual Guides](https://jalammar.github.io/)**  
+  "The Illustrated Transformer" and "The Illustrated Stable Diffusion". If you want to understand how tensors flow through multi-head attention before reading PyTorch code, start here.
+
+- **[Lilian Weng’s Lil'Log](https://lilianweng.github.io/)**  
+  Deep, rigorous technical writeups on diffusion models, reinforcement learning, and LLM agent architectures written by OpenAI's former head of safety systems.
+
+---
+
+## 10. Essential Tooling & Code Repositories
+
+The software stack teams actually rely on:
+
+- **Core Math & Training**:
+  - [PyTorch](https://pytorch.org/): The default industry standard for modeling, experimentation, and production codebases.
+  - [JAX](https://github.com/google/jax): Loved in research labs for functional programming, hardware-agnostic compilation (XLA), and auto-vectorization (`vmap`).
+  - [nanoGPT](https://github.com/karpathy/nanoGPT): Karpathy's clean, hackable repository for training medium-sized GPTs in under 300 lines of PyTorch.
+
+- **Acceleration & Fine-Tuning**:
+  - [Hugging Face PEFT](https://github.com/huggingface/peft): Standardized implementations of LoRA, QLoRA, Prefix Tuning, and AdaLoRA.
+  - [FlashAttention](https://github.com/Dao-AILab/flash-attention): Fast and memory-efficient exact attention algorithms that prevent GPU memory starvation.
+  - [BitsAndBytes](https://github.com/TimDettmers/bitsandbytes): Drop-in 8-bit and 4-bit optimizers and quantization layers.
+
+- **Inference Runtimes**:
+  - [vLLM](https://github.com/vllm-project/vllm): High-throughput serving engine powered by PagedAttention and continuous request batching.
+  - [llama.cpp](https://github.com/ggerganov/llama.cpp): Plain C/C++ implementation for running LLMs locally on CPUs and Apple Silicon without Python overhead.
+
+- **Data & Experiment Tracking**:
+  - [Polars](https://pola.rs/): Blazing fast multi-threaded DataFrame library that replaces pandas for cleaning large datasets.
+  - [Weights & Biases](https://wandb.ai/): The standard tool for logging loss curves, hyperparameter sweeps, and model checkpoints.
+
+---
+
+## 11. Seminal Papers Worth Reading
+
+Skip the flood of repetitive preprints. These foundational papers teach principles that outlast architecture fads:
+
+1. **[Deep Residual Learning for Image Recognition](https://arxiv.org/abs/1512.03385)** (He et al., 2015)  
    Introduced the residual skip connection ($x + f(x)$), solving the vanishing gradient problem and allowing networks to scale to hundreds of layers.
 
-2. **Attention Is All You Need** (Vaswani et al., 2017)
+2. **[Attention Is All You Need](https://arxiv.org/abs/1706.03762)** (Vaswani et al., 2017)  
    Replaced recurrent architectures with pure self-attention mechanisms, launching the modern transformer revolution.
 
-3. **LoRA: Low-Rank Adaptation of Large Language Models** (Hu et al., 2021)
+3. **[LoRA: Low-Rank Adaptation of Large Language Models](https://arxiv.org/abs/2106.09685)** (Hu et al., 2021)  
    The seminal paper demonstrating that weight updates during adaptation live on a low-dimensional manifold.
 
-4. **FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness** (Dao et al., 2022)
+4. **[FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness](https://arxiv.org/abs/2205.14135)** (Dao et al., 2022)  
    A masterclass in hardware-aware software design, focusing on GPU memory hierarchies (SRAM vs HBM) rather than raw FLOPS.
 
-5. **Deep Learning Tuning Playbook** (Google Research, Dahl et al.)
-   Not an academic paper, but an invaluable practical repository documenting how to systematically optimize hyperparameters without guessing.
+5. **[Deep Learning Tuning Playbook](https://github.com/google-research/tuning_playbook)** (Google Research, Dahl et al.)  
+   An invaluable practical repository documenting how to systematically optimize hyperparameters without guesswork.
 
 ---
 
 ## Parting Words
 
-Deep learning rewards patience and empirical discipline. When your model misbehaves, resist the urge to immediately swap architectures or add more layers. 
+Deep learning rewards patience and empirical discipline. When your model misbehaves, resist the urge to immediately swap architectures or add more layers.
 
-Check your data splits. Plot your inputs. Check your learning rate schedule. Overfit a tiny batch. Verify your loss function assumptions. 
+Check your data splits. Plot your inputs. Check your learning rate schedule. Overfit a tiny batch. Verify your loss function assumptions.
 
 Most breakthroughs in deep learning projects do not come from clever math invented late at night; they come from eliminating silent data bugs, stabilizing gradient dynamics, and running disciplined experiments. Keep your setup simple, measure everything, and build one solid step at a time.
